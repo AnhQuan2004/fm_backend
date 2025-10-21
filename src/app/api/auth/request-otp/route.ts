@@ -48,8 +48,9 @@ export async function POST(req: NextRequest) {
     await sendOtpEmail(email, otp, otpRecord.id);
 
     return NextResponse.json({ ok: true, tokenId: otpRecord.id });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
-    return NextResponse.json({ ok: false, error: e.message ?? "Bad Request" }, { status: 400 });
+    const message = e instanceof Error ? e.message : "Bad Request";
+    return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }

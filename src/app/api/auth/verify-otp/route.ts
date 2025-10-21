@@ -5,7 +5,6 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { signSession } from "@/lib/jwt";
 import { verifySession } from "@/lib/jwt";
-import { de } from "zod/locales";
 
 const postSchema = z.object({
     email: z.string().email(),
@@ -86,14 +85,24 @@ async function verifyCore(
             path: "/",
             maxAge: 60 * 60 * 24 * 7, // 7 ngày
         });
-        const decoded = verifySession(token);
+        const sessionData = verifySession(token);
         if (redirectOnSuccess) {
             // Điều hướng về trang chủ hoặc dashboard
             return NextResponse.redirect(new URL("/", process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"));
         }
-        return NextResponse.json({ ok: true, user: decoded});
-    } catch (e: any) {
+
+        return NextResponse.json({
+            ok: true,
+            user: {
+                email: user.email,
+                displayName: user.displayName ?? null,
+                bio: user.bio ?? null,
+                userId: sessionData?.userId,
+            },
+        });
+    } catch (e: unknown) {
         console.error(e);
-        return NextResponse.json({ ok: false, error: e.message ?? "Verify error" }, { status: 400 });
+        const message = e instanceof Error ? e.message : "Verify error";
+        return NextResponse.json({ ok: false, error: message }, { status: 400 });
     }
 }
