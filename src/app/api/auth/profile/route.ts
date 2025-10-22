@@ -6,23 +6,32 @@ import { verifySession } from "@/lib/jwt";
 
 const profileInputSchema = z.object({
   email: z.string().email(),
+  username: z.string().trim().optional(),
+  firstName: z.string().trim().optional(),
+  lastName: z.string().trim().optional(),
+  location: z.string().trim().optional(),
+  skills: z.array(z.string()).optional(),
+  socials: z.string().trim().optional(),
+  github: z.string().trim().optional(),
   displayName: z
     .string()
     .trim()
     .min(2, "Display name phải có ít nhất 2 ký tự")
-    .max(80, "Display name tối đa 80 ký tự"),
+    .max(80, "Display name tối đa 80 ký tự")
+    .optional(),
   bio: z
     .string()
     .trim()
     .min(3, "Bio phải có ít nhất 3 ký tự")
-    .max(240, "Bio tối đa 240 ký tự"),
+    .max(240, "Bio tối đa 240 ký tự")
+    .optional(),
 });
 
 const emailQuerySchema = z.object({
   email: z.string().email().optional(),
 });
 
-function resolveEmail(req: NextRequest): string | null {
+async function resolveEmail(req: NextRequest): Promise<string | null> {
   const parsedQuery = emailQuerySchema.safeParse({
     email: req.nextUrl.searchParams.get("email") ?? undefined,
   });
@@ -31,7 +40,8 @@ function resolveEmail(req: NextRequest): string | null {
     return parsedQuery.data.email;
   }
 
-  const sessionCookie = cookies().get("session");
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get("session");
   if (!sessionCookie) {
     return null;
   }
@@ -42,7 +52,7 @@ function resolveEmail(req: NextRequest): string | null {
 
 export async function GET(req: NextRequest) {
   try {
-    const email = resolveEmail(req);
+    const email = await resolveEmail(req);
     if (!email) {
       return NextResponse.json({ ok: false, error: "Missing email" }, { status: 400 });
     }
@@ -51,6 +61,13 @@ export async function GET(req: NextRequest) {
       where: { email },
       select: {
         email: true,
+        username: true,
+        firstName: true,
+        lastName: true,
+        location: true,
+        skills: true,
+        socials: true,
+        github: true,
         displayName: true,
         bio: true,
         updatedAt: true,
@@ -65,8 +82,15 @@ export async function GET(req: NextRequest) {
       ok: true,
       profile: {
         email: user.email,
-        displayName: user.displayName ?? "",
-        bio: user.bio ?? "",
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        location: user.location,
+        skills: user.skills,
+        socials: user.socials,
+        github: user.github,
+        displayName: user.displayName,
+        bio: user.bio,
         updatedAt: user.updatedAt,
       },
     });
@@ -87,21 +111,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, displayName, bio } = parsed.data;
+    const { email, username, ...rest } = parsed.data;
+
+    if (username) {
+      const existingUser = await prisma.user.findUnique({
+        where: { username },
+      });
+      if (existingUser && existingUser.email !== email) {
+        return NextResponse.json({ ok: false, error: "Username already taken" }, { status: 409 });
+      }
+    }
 
     const profile = await prisma.user.upsert({
       where: { email },
       create: {
         email,
-        displayName,
-        bio,
+        username,
+        ...rest,
       },
       update: {
-        displayName,
-        bio,
+        username,
+        ...rest,
       },
       select: {
         email: true,
+        username: true,
+        firstName: true,
+        lastName: true,
+        location: true,
+        skills: true,
+        socials: true,
+        github: true,
         displayName: true,
         bio: true,
         updatedAt: true,

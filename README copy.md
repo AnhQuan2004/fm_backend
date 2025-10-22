@@ -5,7 +5,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
-npm run dev
+https://github.com/AnhQuan2004/fm_backend.git
 # or
 yarn dev
 # or
@@ -42,3 +42,6 @@ npm i -D @types/jsonwebtoken @types/nodemailer
 
 # Init Prisma
 npx prisma init
+
+#
+cd fm_backend && npx prisma generate
