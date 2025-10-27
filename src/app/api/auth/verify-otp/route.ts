@@ -40,7 +40,7 @@ async function verifyCore(
         const { data: userData, error: userError } = await supabase
             .from("users")
             .select(
-                "id,email,username,first_name,last_name,location,skills,socials,github,display_name,bio"
+                "id,email,username,first_name,last_name,location,skills,socials,github,display_name,bio,role"
             )
             .eq("email", data.email)
             .maybeSingle();
@@ -59,6 +59,7 @@ async function verifyCore(
             github: string | null;
             display_name: string | null;
             bio: string | null;
+            role: string | null;
         } | null;
         if (!user) {
             return NextResponse.json({ ok: false, error: "Email không tồn tại" }, { status: 400 });
@@ -162,6 +163,7 @@ async function verifyCore(
                 github: user.github ?? null,
                 displayName: user.display_name ?? null,
                 bio: user.bio ?? null,
+                role: user.role ?? "user",
             },
         });
     } catch (e: unknown) {

@@ -6,15 +6,6 @@ import { verifySession } from "@/lib/jwt";
 
 const profileInputSchema = z.object({
   email: z.string().email(),
-<<<<<<< HEAD
-  username: z.string().trim().optional(),
-  firstName: z.string().trim().optional(),
-  lastName: z.string().trim().optional(),
-  location: z.string().trim().optional(),
-  skills: z.array(z.string()).optional(),
-  socials: z.string().trim().optional(),
-  github: z.string().trim().optional(),
-=======
   username: z
     .string()
     .trim()
@@ -51,7 +42,6 @@ const profileInputSchema = z.object({
     .trim()
     .max(100, "GitHub username tối đa 100 ký tự")
     .optional(),
->>>>>>> e38804f (Change backend to Supabase)
   displayName: z
     .string()
     .trim()
@@ -62,11 +52,7 @@ const profileInputSchema = z.object({
     .string()
     .trim()
     .min(3, "Bio phải có ít nhất 3 ký tự")
-<<<<<<< HEAD
-    .max(240, "Bio tối đa 240 ký tự")
-=======
     .max(280, "Bio tối đa 280 ký tự")
->>>>>>> e38804f (Change backend to Supabase)
     .optional(),
 });
 
@@ -100,29 +86,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Missing email" }, { status: 400 });
     }
 
-<<<<<<< HEAD
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: {
-        email: true,
-        username: true,
-        firstName: true,
-        lastName: true,
-        location: true,
-        skills: true,
-        socials: true,
-        github: true,
-        displayName: true,
-        bio: true,
-        updatedAt: true,
-      },
-    });
-=======
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("users")
       .select(
-        "email,username,first_name,last_name,location,skills,socials,github,display_name,bio,updated_at",
+        "email,username,first_name,last_name,location,skills,socials,github,display_name,bio,role,updated_at",
       )
       .eq("email", email)
       .maybeSingle();
@@ -141,9 +109,9 @@ export async function GET(req: NextRequest) {
       github: string | null;
       display_name: string | null;
       bio: string | null;
+      role: string | null;
       updated_at: string | null;
     } | null;
->>>>>>> e38804f (Change backend to Supabase)
 
     if (!user) {
       return NextResponse.json({ ok: false, error: "User not found" }, { status: 404 });
@@ -153,18 +121,6 @@ export async function GET(req: NextRequest) {
       ok: true,
       profile: {
         email: user.email,
-<<<<<<< HEAD
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        location: user.location,
-        skills: user.skills,
-        socials: user.socials,
-        github: user.github,
-        displayName: user.displayName,
-        bio: user.bio,
-        updatedAt: user.updatedAt,
-=======
         username: user.username ?? "",
         firstName: user.first_name ?? "",
         lastName: user.last_name ?? "",
@@ -174,8 +130,8 @@ export async function GET(req: NextRequest) {
         github: user.github ?? "",
         displayName: user.display_name ?? "",
         bio: user.bio ?? "",
+        role: user.role ?? "user",
         updatedAt: user.updated_at,
->>>>>>> e38804f (Change backend to Supabase)
       },
     });
   } catch (error) {
@@ -195,43 +151,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-<<<<<<< HEAD
-    const { email, username, ...rest } = parsed.data;
-
-    if (username) {
-      const existingUser = await prisma.user.findUnique({
-        where: { username },
-      });
-      if (existingUser && existingUser.email !== email) {
-        return NextResponse.json({ ok: false, error: "Username already taken" }, { status: 409 });
-      }
-    }
-
-    const profile = await prisma.user.upsert({
-      where: { email },
-      create: {
-        email,
-        username,
-        ...rest,
-      },
-      update: {
-        username,
-        ...rest,
-      },
-      select: {
-        email: true,
-        username: true,
-        firstName: true,
-        lastName: true,
-        location: true,
-        skills: true,
-        socials: true,
-        github: true,
-        displayName: true,
-        bio: true,
-        updatedAt: true,
-=======
-    const { email, displayName, bio, username, firstName, lastName, location, skills, socials, github } = parsed.data;
+    const {
+      email,
+      displayName,
+      bio,
+      username,
+      firstName,
+      lastName,
+      location,
+      skills,
+      socials,
+      github,
+    } = parsed.data;
 
     const sanitize = (value?: string) => {
       if (value === undefined) return null;
@@ -270,7 +201,7 @@ export async function POST(req: NextRequest) {
       .from("users")
       .upsert(payload, { onConflict: "email" })
       .select(
-        "email,username,first_name,last_name,location,skills,socials,github,display_name,bio,updated_at",
+        "email,username,first_name,last_name,location,skills,socials,github,display_name,bio,role,updated_at",
       )
       .single();
 
@@ -289,6 +220,7 @@ export async function POST(req: NextRequest) {
       github: string | null;
       display_name: string | null;
       bio: string | null;
+      role: string | null;
       updated_at: string | null;
     };
 
@@ -305,8 +237,8 @@ export async function POST(req: NextRequest) {
         github: profile.github ?? "",
         displayName: profile.display_name ?? "",
         bio: profile.bio ?? "",
+        role: profile.role ?? "user",
         updatedAt: profile.updated_at,
->>>>>>> e38804f (Change backend to Supabase)
       },
     });
   } catch (error) {
