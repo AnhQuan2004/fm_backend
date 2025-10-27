@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getSupabaseClient } from "@/lib/supabase";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
@@ -35,15 +35,52 @@ async function verifyCore(
     redirectOnSuccess: boolean
 ) {
     try {
-        const user = await prisma.user.findUnique({ where: { email: data.email } });
+        const supabase = getSupabaseClient();
+
+        const { data: userData, error: userError } = await supabase
+            .from("users")
+            .select(
+                "id,email,username,first_name,last_name,location,skills,socials,github,display_name,bio"
+            )
+            .eq("email", data.email)
+            .maybeSingle();
+        if (userError) {
+            throw new Error(`Failed to look up user: ${userError.message}`);
+        }
+        const user = userData as {
+            id: string;
+            email: string;
+            username: string | null;
+            first_name: string | null;
+            last_name: string | null;
+            location: string | null;
+            skills: string[] | null;
+            socials: string | null;
+            github: string | null;
+            display_name: string | null;
+            bio: string | null;
+        } | null;
         if (!user) {
             return NextResponse.json({ ok: false, error: "Email không tồn tại" }, { status: 400 });
         }
 
-        const record = await prisma.otpToken.findUnique({
-            where: { id: data.tokenId },
-        });
-        if (!record || record.userId !== user.id) {
+        const { data: tokenData, error: tokenError } = await supabase
+            .from("otp_tokens")
+            .select("id,user_id,otp_hash,expires_at,attempts_left,status")
+            .eq("id", data.tokenId)
+            .maybeSingle();
+        if (tokenError) {
+            throw new Error(`Failed to retrieve OTP token: ${tokenError.message}`);
+        }
+        const record = tokenData as {
+            id: string;
+            user_id: string;
+            otp_hash: string;
+            expires_at: string;
+            attempts_left: number;
+            status: "PENDING" | "USED" | "EXPIRED";
+        } | null;
+        if (!record || record.user_id !== user.id) {
             return NextResponse.json({ ok: false, error: "Token không hợp lệ" }, { status: 400 });
         }
 
@@ -51,30 +88,50 @@ async function verifyCore(
             return NextResponse.json({ ok: false, error: "OTP đã dùng hoặc không còn hiệu lực" }, { status: 400 });
         }
 
-        if (new Date() > record.expiresAt) {
-            await prisma.otpToken.update({ where: { id: record.id }, data: { status: "EXPIRED" } });
+        const expiresAt = new Date(record.expires_at);
+        if (Number.isNaN(expiresAt.getTime()) || new Date() > expiresAt) {
+            const { error: expireError } = await supabase
+                .from("otp_tokens")
+                .update({ status: "EXPIRED" })
+                .eq("id", record.id);
+            if (expireError) {
+                console.error("Failed to expire OTP after timeout:", expireError);
+            }
             return NextResponse.json({ ok: false, error: "OTP hết hạn" }, { status: 400 });
         }
 
-        if (record.attemptsLeft <= 0) {
-            await prisma.otpToken.update({ where: { id: record.id }, data: { status: "EXPIRED" } });
+        if (record.attempts_left <= 0) {
+            const { error: expireError } = await supabase
+                .from("otp_tokens")
+                .update({ status: "EXPIRED" })
+                .eq("id", record.id);
+            if (expireError) {
+                console.error("Failed to expire OTP after attempts exceeded:", expireError);
+            }
             return NextResponse.json({ ok: false, error: "Đã vượt quá số lần thử" }, { status: 400 });
         }
 
-        const ok = await bcrypt.compare(data.otp, record.otpHash);
+        const ok = await bcrypt.compare(data.otp, record.otp_hash);
         if (!ok) {
-            await prisma.otpToken.update({
-                where: { id: record.id },
-                data: { attemptsLeft: record.attemptsLeft - 1 },
-            });
+            const nextAttempts = Math.max(record.attempts_left - 1, 0);
+            const { error: decrementError } = await supabase
+                .from("otp_tokens")
+                .update({ attempts_left: nextAttempts })
+                .eq("id", record.id);
+            if (decrementError) {
+                console.error("Failed to decrement OTP attempts:", decrementError);
+            }
             return NextResponse.json({ ok: false, error: "OTP sai" }, { status: 400 });
         }
 
         // Thành công → đánh dấu USED
-        await prisma.otpToken.update({
-            where: { id: record.id },
-            data: { status: "USED" },
-        });
+        const { error: markUsedError } = await supabase
+            .from("otp_tokens")
+            .update({ status: "USED" })
+            .eq("id", record.id);
+        if (markUsedError) {
+            throw new Error(`Failed to update OTP status: ${markUsedError.message}`);
+        }
 
         // Tạo session cookie
         const token = signSession({ userId: user.id, email: user.email });
@@ -95,9 +152,16 @@ async function verifyCore(
             ok: true,
             user: {
                 email: user.email,
-                displayName: user.displayName ?? null,
-                bio: user.bio ?? null,
                 userId: sessionData?.userId,
+                username: user.username ?? null,
+                firstName: user.first_name ?? null,
+                lastName: user.last_name ?? null,
+                location: user.location ?? null,
+                skills: user.skills ?? [],
+                socials: user.socials ?? null,
+                github: user.github ?? null,
+                displayName: user.display_name ?? null,
+                bio: user.bio ?? null,
             },
         });
     } catch (e: unknown) {
